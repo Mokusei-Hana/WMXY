@@ -1,0 +1,17 @@
+# 本地登录态（含 session / deviceId，切勿提交）
+.wanxiao_state.json
+
+# 抓包与导出文件
+*.mitm
+h5/
+*.log
+dump*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store
