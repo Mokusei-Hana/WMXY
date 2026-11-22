@@ -64,7 +64,7 @@ enum SWAEMeterKind: String, Hashable {
         case .electricity: return "电表"
         case .coldWater: return "冷水表"
         case .hotWater: return "热水表"
-        case .airConditioner: return "空调表"
+        case .airConditioner: return "空调"
         case .other: return "表计"
         }
     }
@@ -283,6 +283,34 @@ struct SWAERoomDetail: Identifiable, Codable, Hashable {
         if meter.kind == .airConditioner { return .airConditioner }
         if roomFullName.contains("空调"), meter.businessType == 0 { return .airConditioner }
         return meter.kind
+    }
+
+    /// 面向学生的简洁表计名称（隐藏 DDS1354 / CJ/T188 等硬件型号编码）。
+    func displayName(for meter: SWAEMeterDetail) -> String {
+        let meterKind = kind(for: meter)
+        let hasCold = meters.contains { kind(for: $0) == .coldWater }
+        let hasHot = meters.contains { kind(for: $0) == .hotWater }
+
+        let base: String
+        switch meterKind {
+        case .electricity:
+            base = "电表"
+        case .coldWater:
+            base = hasHot ? "冷水表" : "水表"
+        case .hotWater:
+            base = hasCold ? "热水表" : "热水"
+        case .airConditioner:
+            base = "空调"
+        case .other:
+            base = "表计"
+        }
+
+        let sameKindMeters = meters.filter { kind(for: $0) == meterKind }
+        guard sameKindMeters.count > 1,
+              let index = sameKindMeters.firstIndex(where: { $0.id == meter.id }) else {
+            return base
+        }
+        return "\(base) \(index + 1)"
     }
 }
 

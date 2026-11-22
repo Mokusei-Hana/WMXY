@@ -36,10 +36,6 @@ struct UnlockHistoryView: View {
                         ForEach(groups, id: \.day) { group in
                             daySection(group.day, records: group.records)
                         }
-                        Text("记录仅保存在本机，可通过清除操作删除。")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                            .padding(.top, 2)
                     }
                     .padding(.horizontal, AppTheme.screenPadding)
                     .padding(.top, 8)

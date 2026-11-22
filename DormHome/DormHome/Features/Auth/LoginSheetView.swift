@@ -58,8 +58,7 @@ struct LoginSheetView: View {
                         errorBanner(errorMessage)
                     }
                     submitButton
-                    deviceNote
-                    demoButton
+                    cancelButton
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
@@ -149,7 +148,7 @@ struct LoginSheetView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("登录完美校园")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                Text("连接你的账号，即可远程开启本人已授权门锁")
+                Text("登录后即可远程开锁与查看宿舍水电")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -297,8 +296,8 @@ struct LoginSheetView: View {
                 get: { store.rememberCredentials },
                 set: { store.setRememberCredentials($0) }
             )) {
-                Text("保存登录凭证以便自动续登")
-                    .font(.system(size: 12, weight: .medium))
+                Text("记住登录状态")
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
             }
             .toggleStyle(.switch)
@@ -415,37 +414,12 @@ struct LoginSheetView: View {
         .disabled(isSubmitting || !canSubmit)
     }
 
-    private var deviceNote: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.onlineGreen)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("本机设备 ID 固定为 \(store.deviceId)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("保持不变可避免触发「新设备登录」短信验证；密码仅保存在本机 Keychain。")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .background {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.primary.opacity(0.035))
-        }
-    }
-
-    private var demoButton: some View {
+    private var cancelButton: some View {
         Button {
             dismiss()
         } label: {
-            Text(store.isLoggedIn ? "取消" : "暂不登录，继续以演示模式体验")
-                .font(.system(size: 12, weight: .medium))
+            Text(store.isLoggedIn ? "取消" : "暂不登录")
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)

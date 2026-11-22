@@ -2,11 +2,10 @@
 //  SettingsView.swift
 //  DormHome
 //
-//  账号与登录态、设备 ID、外观、模块开关、安全设置。
+//  账号、外观、门锁体验、生活服务与数据管理。
 //
 
 import SwiftUI
-import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject private var store: DormStore
@@ -19,10 +18,6 @@ struct SettingsView: View {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
 
-    private var build: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -32,14 +27,11 @@ struct SettingsView: View {
                     VStack(spacing: AppTheme.moduleSpacing) {
                         header
                         accountCard
-                        sessionCard
-                        deviceCard
                         appearanceCard
                         doorCard
                         modulesCard
-                        securityCard
+                        dataCard
                         aboutCard
-                        footerNote
                     }
                     .padding(.horizontal, AppTheme.screenPadding)
                     .padding(.top, 8)
@@ -51,13 +43,11 @@ struct SettingsView: View {
             .toolbar(.hidden, for: .navigationBar)
         }
         .fontDesign(.rounded)
-        .confirmationDialog("退出完美校园账号？", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+        .confirmationDialog("退出当前账号？", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) {
                 model.signOut()
             }
             Button("取消", role: .cancel) {}
-        } message: {
-            Text("退出后将回到演示模式，本机设备 ID 与开门记录会保留。")
         }
         .confirmationDialog("清除全部开门记录？", isPresented: $showClearHistoryConfirm, titleVisibility: .visible) {
             Button("清除记录", role: .destructive) {
@@ -75,19 +65,16 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("账号、外观与设备偏好")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text("设置")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-            }
+            Text("设置")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+
             Spacer()
+
             HStack(spacing: 6) {
                 Circle()
-                    .fill(store.isLoggedIn ? AppTheme.onlineGreen : AppTheme.warningAmber)
+                    .fill(statusDotColor)
                     .frame(width: 6, height: 6)
-                Text(store.isLoggedIn ? "已连接" : "演示模式")
+                Text(store.sessionStatusText)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
@@ -95,6 +82,12 @@ struct SettingsView: View {
             .frame(height: 30)
             .glassEffect(.regular, in: Capsule(style: .continuous))
         }
+    }
+
+    private var statusDotColor: Color {
+        if store.isLoggedIn { return AppTheme.onlineGreen }
+        if store.isDemoMode { return AppTheme.warningAmber }
+        return Color.secondary.opacity(0.6)
     }
 
     // MARK: - 账号
@@ -105,23 +98,30 @@ struct SettingsView: View {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [AppTheme.actionCyan, AppTheme.actionBlue],
+                            colors: store.isLoggedIn
+                                ? [AppTheme.actionCyan, AppTheme.actionBlue]
+                                : [Color.secondary.opacity(0.35), Color.secondary.opacity(0.2)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                Text(accountInitial)
-                    .font(.system(size: 21, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                if store.isLoggedIn {
+                    Text(accountInitial)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(.white)
+                }
             }
-            .frame(width: 52, height: 52)
-            .shadow(color: AppTheme.actionBlue.opacity(0.25), radius: 10, y: 4)
+            .frame(width: 50, height: 50)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(store.isLoggedIn ? (store.userName ?? "完美校园用户") : "演示访客")
+                Text(store.isLoggedIn ? (store.userName ?? "完美校园用户") : "未登录")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .lineLimit(1)
-                Text(store.isLoggedIn ? maskedPhone : "登录后连接真实宿舍门锁")
+                Text(store.isLoggedIn ? maskedPhone : "登录完美校园以使用门锁与水电")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -157,142 +157,61 @@ struct SettingsView: View {
 
     private var maskedPhone: String {
         guard let phone = store.phone, phone.count == 11 else {
-            return store.isLoggedIn ? "已连接完美校园" : "演示模式"
+            return "已连接完美校园"
         }
         return phone.prefix(3) + "****" + phone.suffix(4)
-    }
-
-    // MARK: - 会话
-
-    private var sessionCard: some View {
-        SettingsCard(title: "登录态") {
-            SettingsRow(icon: "checkmark.seal.fill", tint: store.isLoggedIn ? AppTheme.onlineGreen : AppTheme.warningAmber, title: "会话状态", subtitle: nil) {
-                Text(store.isLoggedIn ? "有效 · \(store.sessionAgeText)" : "未登录")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            rowDivider
-            SettingsRow(icon: "number", tint: AppTheme.actionBlue, title: "outid", subtitle: nil) {
-                Text(store.outid ?? "—")
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            rowDivider
-            SettingsRow(icon: "key.horizontal.fill", tint: AppTheme.campusPurple, title: "会话 ID", subtitle: nil) {
-                Text(store.sessionShortID)
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    // MARK: - 设备 ID
-
-    private var deviceCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(AppTheme.waterBlue.opacity(0.14))
-                    Image(systemName: "iphone.gen3")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(AppTheme.waterBlue)
-                }
-                .frame(width: 34, height: 34)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("本机设备 ID")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text(store.deviceId)
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-
-                Spacer(minLength: 4)
-
-                Button {
-                    UIPasteboard.general.string = store.deviceId
-                    Haptics.impact(.light)
-                    model.showToast("设备 ID 已复制", style: .success)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glass)
-                .accessibilityLabel("复制设备 ID")
-            }
-
-            Text("设备 ID 首次生成后保持不变。更换设备 ID 会触发完美校园「新设备登录」短信验证。")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
     }
 
     // MARK: - 外观
 
     private var appearanceCard: some View {
         SettingsCard(title: "外观") {
-            VStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    ForEach(ThemeMode.allCases) { mode in
-                        Button {
-                            withAnimation(AppTheme.backgroundEase) {
-                                store.setThemeMode(mode)
-                            }
-                            Haptics.impact(.light)
-                        } label: {
-                            VStack(spacing: 6) {
-                                Image(systemName: mode.symbol)
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text(mode.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 11)
-                            .foregroundStyle(store.themeMode == mode ? AppTheme.actionBlue : Color.secondary)
-                            .background {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(store.themeMode == mode ? AppTheme.actionBlue.opacity(0.13) : Color.primary.opacity(0.035))
-                            }
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .strokeBorder(
-                                        store.themeMode == mode ? AppTheme.actionBlue.opacity(0.4) : Color.clear,
-                                        lineWidth: 1
-                                    )
-                            }
+            HStack(spacing: 8) {
+                ForEach(ThemeMode.allCases) { mode in
+                    Button {
+                        withAnimation(AppTheme.backgroundEase) {
+                            store.setThemeMode(mode)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("外观：\(mode.title)")
+                        Haptics.impact(.light)
+                    } label: {
+                        VStack(spacing: 6) {
+                            Image(systemName: mode.symbol)
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(mode.title)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .foregroundStyle(store.themeMode == mode ? AppTheme.actionBlue : Color.secondary)
+                        .background {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(store.themeMode == mode ? AppTheme.actionBlue.opacity(0.13) : Color.primary.opacity(0.035))
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(
+                                    store.themeMode == mode ? AppTheme.actionBlue.opacity(0.4) : Color.clear,
+                                    lineWidth: 1
+                                )
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("外观：\(mode.title)")
                 }
-                .padding(12)
-
-                Text("外观切换立即生效，并同步影响背景氛围光与玻璃材质。")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 14)
             }
+            .padding(12)
         }
     }
 
-    // MARK: - 门锁
+    // MARK: - 门锁与体验
 
     private var doorCard: some View {
-        SettingsCard(title: "门锁体验") {
+        SettingsCard(title: "门锁与体验") {
             SettingsRow(
                 icon: "timer",
                 tint: AppTheme.warningAmber,
-                title: "自动回锁倒计时",
-                subtitle: "开锁成功后自动复位的演示时长"
+                title: "自动上锁倒计时",
+                subtitle: "开锁后自动恢复上锁状态"
             ) {
                 HStack(spacing: 8) {
                     stepButton(symbol: "minus") {
@@ -304,7 +223,7 @@ struct SettingsView: View {
                     Text("\(store.autoRelockSeconds) 秒")
                         .font(.system(size: 12, weight: .semibold))
                         .monospacedDigit()
-                        .frame(minWidth: 44)
+                        .frame(minWidth: 42)
 
                     stepButton(symbol: "plus") {
                         store.setAutoRelockSeconds(store.autoRelockSeconds + 5)
@@ -313,26 +232,46 @@ struct SettingsView: View {
                     .disabled(store.autoRelockSeconds >= 60)
                 }
             }
-            rowDivider
-            SettingsRow(
-                icon: "door.left.hand.open",
-                tint: AppTheme.actionBlue,
-                title: "门锁列表",
-                subtitle: store.isLoggedIn ? "\(store.devices.count) 把已授权门锁" : "演示门锁 · 3栋 412"
-            ) {
-                Button {
-                    model.refreshDevices()
-                } label: {
-                    if model.isRefreshing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Text("同步")
-                            .font(.system(size: 12, weight: .semibold))
+
+            if store.isLoggedIn {
+                rowDivider
+                SettingsRow(
+                    icon: "door.left.hand.open",
+                    tint: AppTheme.actionBlue,
+                    title: "门锁列表",
+                    subtitle: "\(store.devices.count) 把可用门锁"
+                ) {
+                    Button {
+                        model.refreshDevices()
+                    } label: {
+                        if model.isRefreshing {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("同步")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
                     }
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+                    .disabled(model.isRefreshing || model.isBusy)
                 }
-                .buttonStyle(.glass)
-                .controlSize(.small)
-                .disabled(model.isRefreshing || model.isBusy)
+            } else {
+                rowDivider
+                SettingsRow(
+                    icon: "sparkles",
+                    tint: AppTheme.waterBlue,
+                    title: "演示模式",
+                    subtitle: "未登录时预览模拟门锁与水电"
+                ) {
+                    Toggle("", isOn: Binding(
+                        get: { store.isDemoMode },
+                        set: { enabled in
+                            model.setDemoMode(enabled)
+                        }
+                    ))
+                    .labelsHidden()
+                    .tint(AppTheme.actionBlue)
+                }
             }
         }
     }
@@ -363,8 +302,18 @@ struct SettingsView: View {
                     .frame(width: 32, height: 32)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(module.title)
-                            .font(.system(size: 13, weight: .semibold))
+                        HStack(spacing: 6) {
+                            Text(module.title)
+                                .font(.system(size: 13, weight: .semibold))
+                            if let badge = module.badge {
+                                Text(badge)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.primary.opacity(0.055)))
+                            }
+                        }
                         Text(module.subtitle)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
@@ -392,30 +341,16 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - 安全
+    // MARK: - 隐私与数据
 
-    private var securityCard: some View {
-        SettingsCard(title: "安全与隐私") {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle().fill(AppTheme.campusPurple.opacity(0.14))
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.campusPurple)
-                }
-                .frame(width: 32, height: 32)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("保存登录凭证")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("仅保存在本机 Keychain，用于会话失效时自动续登")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 6)
-
+    private var dataCard: some View {
+        SettingsCard(title: "账号与数据") {
+            SettingsRow(
+                icon: "key.fill",
+                tint: AppTheme.campusPurple,
+                title: "记住登录状态",
+                subtitle: "免去每次重新输入密码"
+            ) {
                 Toggle("", isOn: Binding(
                     get: { store.rememberCredentials },
                     set: { enabled in
@@ -426,8 +361,6 @@ struct SettingsView: View {
                 .labelsHidden()
                 .tint(AppTheme.campusPurple)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
 
             rowDivider
 
@@ -458,77 +391,74 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            if store.isLoggedIn {
+                rowDivider
+
+                Button {
+                    showSignOutConfirm = true
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle().fill(AppTheme.dangerRed.opacity(0.12))
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppTheme.dangerRed)
+                        }
+                        .frame(width: 32, height: 32)
+
+                        Text("退出登录")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(AppTheme.dangerRed)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
     // MARK: - 关于
 
     private var aboutCard: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color(hex: 0x14203A), Color(hex: 0x0A1626)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+        HStack(spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: 0x14203A), Color(hex: 0x0A1626)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                    Image(systemName: "door.left.hand.open")
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [AppTheme.actionCyan, AppTheme.onlineGreen],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                    )
+                Image(systemName: "door.left.hand.open")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [AppTheme.actionCyan, AppTheme.onlineGreen],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                }
-                .frame(width: 48, height: 48)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("宿享")
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
-                    Text("DormHome · \(version) (\(build))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Text("iOS 26")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.primary.opacity(0.055)))
+                    )
             }
-            .padding(16)
+            .frame(width: 44, height: 44)
 
-            rowDivider
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("基于完美校园开放协议实现，远程指令仅用于本人账号与本人已授权门禁设备。本应用不收集、不上传任何个人数据；门锁列表与操作记录仅保存在本机。")
+            VStack(alignment: .leading, spacing: 2) {
+                Text("宿享")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                Text("版本 \(version)")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-        }
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
-    }
 
-    private var footerNote: some View {
-        VStack(spacing: 4) {
-            Text("Made for dorm life")
-                .font(.system(size: 10, weight: .medium))
-            Text("请遵守学校门禁管理规定")
-                .font(.system(size: 10))
+            Spacer()
         }
-        .foregroundStyle(.tertiary)
-        .padding(.top, 4)
+        .padding(14)
+        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
     }
 
     // MARK: - 通用

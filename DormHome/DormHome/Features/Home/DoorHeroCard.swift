@@ -9,6 +9,7 @@
 import SwiftUI
 
 struct DoorHeroCard: View {
+    @EnvironmentObject private var store: DormStore
     @EnvironmentObject private var model: DormAppModel
     @Environment(\.colorScheme) private var scheme
 
@@ -16,16 +17,123 @@ struct DoorHeroCard: View {
     private var accent: Color { AppTheme.accent(for: model.doorState) }
 
     var body: some View {
-        VStack(spacing: 16) {
-            header
-            LockOrb(model: model)
-            actionBar
-            microStatus
+        Group {
+            if !store.isLoggedIn && !store.isDemoMode {
+                signInPromptCard
+            } else if device == nil {
+                noDeviceCard
+            } else {
+                VStack(spacing: 16) {
+                    header
+                    LockOrb(model: model)
+                    actionBar
+                    if let status = model.microStatus {
+                        microStatus(status)
+                    }
+                }
+            }
         }
         .padding(22)
         .frame(maxWidth: .infinity)
         .dormGlassCard(corner: AppTheme.heroCorner)
         .animation(AppTheme.stateSpring, value: model.doorState)
+        .animation(AppTheme.stateSpring, value: store.isLoggedIn)
+        .animation(AppTheme.stateSpring, value: store.isDemoMode)
+    }
+
+    // MARK: - 未登录引导
+
+    private var signInPromptCard: some View {
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [AppTheme.actionBlue.opacity(0.24), AppTheme.actionCyan.opacity(0.06), .clear],
+                            center: .center,
+                            startRadius: 8,
+                            endRadius: 62
+                        )
+                    )
+                    .frame(width: 120, height: 120)
+
+                Image(systemName: "door.left.hand.open")
+                    .font(.system(size: 38, weight: .medium))
+                    .foregroundStyle(AppTheme.actionBlue)
+                    .symbolRenderingMode(.hierarchical)
+                    .frame(width: 84, height: 84)
+                    .glassEffect(.regular.tint(AppTheme.actionBlue.opacity(0.16)), in: .circle)
+            }
+            .padding(.top, 4)
+
+            VStack(spacing: 6) {
+                Text("连接完美校园")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Text("登录后即可远程开锁与查看宿舍水电")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                Haptics.impact(.medium)
+                model.openLogin()
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("登录账号")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(AppTheme.actionBlue)
+            .padding(.top, 4)
+        }
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - 已登录但暂无门锁
+
+    private var noDeviceCard: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "lock.slash")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.secondary)
+                .frame(width: 72, height: 72)
+                .glassEffect(.regular, in: .circle)
+
+            VStack(spacing: 5) {
+                Text("暂无可用门锁")
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                Text("下拉或轻点下方按钮重新同步门锁列表")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+
+            Button {
+                model.refreshDevices()
+            } label: {
+                HStack(spacing: 6) {
+                    if model.isRefreshing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    Text(model.isRefreshing ? "正在同步…" : "同步门锁")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+            .buttonStyle(.glassProminent)
+            .tint(AppTheme.actionBlue)
+            .disabled(model.isRefreshing)
+        }
+        .padding(.vertical, 8)
     }
 
     // MARK: - 顶部信息行
@@ -50,14 +158,12 @@ struct DoorHeroCard: View {
                         .frame(width: 6, height: 6)
                     Text((device?.isOnline ?? false) ? "在线" : "离线")
 
-                    Text("·").foregroundStyle(.tertiary)
-
-                    Image(systemName: device?.batterySymbol ?? "battery.0percent")
-                        .font(.system(size: 12, weight: .medium))
-                    Text(device?.battery.map { "\($0)%" } ?? "—")
-
-                    Text("·").foregroundStyle(.tertiary)
-                    Text("SN \(serialSuffix)")
+                    if let battery = device?.battery {
+                        Text("·").foregroundStyle(.tertiary)
+                        Image(systemName: device?.batterySymbol ?? "battery.0percent")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("\(battery)%")
+                    }
                 }
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(.secondary)
@@ -84,11 +190,6 @@ struct DoorHeroCard: View {
             .disabled(model.isBusy || model.isRefreshing)
             .accessibilityLabel("刷新门锁状态")
         }
-    }
-
-    private var serialSuffix: String {
-        guard let sn = device?.serialNo, sn.count >= 4 else { return "—" }
-        return String(sn.suffix(4))
     }
 
     private var deviceMenu: some View {
@@ -160,18 +261,18 @@ struct DoorHeroCard: View {
 
     // MARK: - 底部微状态
 
-    private var microStatus: some View {
+    private func microStatus(_ text: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(accent.opacity(0.9))
-            Text(model.microStatus)
-                .font(.system(size: 12, weight: .regular))
+            Circle()
+                .fill(accent.opacity(0.85))
+                .frame(width: 5, height: 5)
+            Text(text)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 

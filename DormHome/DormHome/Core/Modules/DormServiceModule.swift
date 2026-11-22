@@ -70,7 +70,10 @@ enum ModuleRegistry {
         )
     ]
 
-    static let defaultEnabledIDs = all.map(\.id)
+    static let defaultEnabledIDs: [String] = [
+        DormServiceModule.Kind.utilities.rawValue,
+        DormServiceModule.Kind.history.rawValue
+    ]
 
     static func enabled(ids: [String]) -> [DormServiceModule] {
         all.filter { ids.contains($0.id) }

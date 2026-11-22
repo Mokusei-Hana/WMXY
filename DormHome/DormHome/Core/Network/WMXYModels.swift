@@ -31,11 +31,11 @@ enum WMXYError: LocalizedError, Equatable {
         case .server(let message):
             return message.isEmpty ? "服务暂时不可用，请稍后再试" : message
         case .newDeviceVerification:
-            return "检测到新设备登录，完美校园要求短信验证"
+            return "检测到新设备登录，请使用短信验证码验证"
         case .invalidSession:
-            return "登录态已失效，请重新登录完美校园账号"
+            return "登录已过期，请重新登录"
         case .missingParams:
-            return "授权跳转缺少 params，H5 会话创建失败"
+            return "登录授权失败，请重试"
         case .loginRequired:
             return "请先登录完美校园账号"
         }
@@ -44,9 +44,9 @@ enum WMXYError: LocalizedError, Equatable {
     var recoverySuggestion: String? {
         switch self {
         case .newDeviceVerification:
-            return "请切换到「短信验证码」登录完成一次验证；之后保持本机设备 ID 不变即可避免重复验证。"
+            return "请切换到「短信验证码」完成一次验证。"
         case .invalidSession:
-            return "重新登录后会自动完成 H5 授权与门锁同步。"
+            return "重新登录后会自动同步你的门锁。"
         default:
             return nil
         }
@@ -142,10 +142,10 @@ enum UnlockChannel: String, Codable, CaseIterable, Hashable {
 
     var title: String {
         switch self {
-        case .remote: return "远程指令"
-        case .autoRelock: return "自动回锁"
-        case .demo: return "演示模式"
-        case .local: return "本机操作"
+        case .remote: return "远程开锁"
+        case .autoRelock: return "自动上锁"
+        case .demo: return "演示"
+        case .local: return "手动上锁"
         }
     }
 }

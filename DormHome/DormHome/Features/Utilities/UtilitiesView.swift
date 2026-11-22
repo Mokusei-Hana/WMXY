@@ -2,7 +2,7 @@
 //  UtilitiesView.swift
 //  DormHome
 //
-//  生活 Tab / 水电费模块 / 空调与一卡通扩展位。
+//  生活 Tab / 水电费查询 / 扩展模块。
 //
 
 import SwiftUI
@@ -33,8 +33,10 @@ struct LifeView: View {
     @EnvironmentObject private var store: DormStore
     @EnvironmentObject private var model: DormAppModel
 
-    private var modules: [DormServiceModule] {
+    /// 生活页顶部已完整呈现水电，下方仅展示其他已开启的服务模块。
+    private var otherModules: [DormServiceModule] {
         ModuleRegistry.enabled(ids: store.enabledModuleIDs)
+            .filter { $0.kind != .utilities }
     }
 
     var body: some View {
@@ -45,9 +47,10 @@ struct LifeView: View {
                 ScrollView {
                     VStack(spacing: AppTheme.moduleSpacing) {
                         header
-                        UtilitiesContent(showAPI: false)
-                        modulesSection
-                        comingSoon
+                        UtilitiesContent(showRoomBar: true)
+                        if !otherModules.isEmpty {
+                            modulesSection
+                        }
                     }
                     .padding(.horizontal, AppTheme.screenPadding)
                     .padding(.top, 8)
@@ -67,7 +70,7 @@ struct LifeView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(store.roomName) · 一站式校园生活")
+                Text(store.roomName)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -81,6 +84,7 @@ struct LifeView: View {
                 withAnimation(AppTheme.stateSpring) {
                     model.selectedTab = .settings
                 }
+                Haptics.impact(.light)
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "slider.horizontal.3")
@@ -99,78 +103,26 @@ struct LifeView: View {
 
     private var modulesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("服务模块")
+            Text("更多服务")
                 .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .padding(.horizontal, 4)
 
-            if modules.isEmpty {
-                Text("尚未开启服务模块，可在设置中开启")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
-            } else {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: AppTheme.tileSpacing),
-                        GridItem(.flexible(), spacing: AppTheme.tileSpacing)
-                    ],
-                    spacing: AppTheme.tileSpacing
-                ) {
-                    ForEach(modules) { module in
-                        ServiceTileView(
-                            module: module,
-                            value: model.value(for: module),
-                            detail: model.detail(for: module)
-                        )
-                    }
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: AppTheme.tileSpacing),
+                    GridItem(.flexible(), spacing: AppTheme.tileSpacing)
+                ],
+                spacing: AppTheme.tileSpacing
+            ) {
+                ForEach(otherModules) { module in
+                    ServiceTileView(
+                        module: module,
+                        value: model.value(for: module),
+                        detail: model.detail(for: module)
+                    )
                 }
             }
         }
-    }
-
-    private var comingSoon: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("扩展中心")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text("更多宿舍服务正在接入")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("即将上线")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(Color.primary.opacity(0.055)))
-            }
-
-            HStack(spacing: 0) {
-                comingSoonItem(symbol: "washer.fill", title: "洗衣房")
-                comingSoonItem(symbol: "wrench.and.screwdriver.fill", title: "报修")
-                comingSoonItem(symbol: "person.badge.key.fill", title: "访客")
-            }
-        }
-        .padding(16)
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
-    }
-
-    private func comingSoonItem(symbol: String, title: String) -> some View {
-        VStack(spacing: 7) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(Color.primary.opacity(0.05)))
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
     }
 }
 
@@ -184,7 +136,7 @@ struct UtilitiesView: View {
             AmbientBackgroundView(state: model.doorState)
 
             ScrollView {
-                UtilitiesContent(showAPI: true)
+                UtilitiesContent(showRoomBar: true)
                     .padding(.horizontal, AppTheme.screenPadding)
                     .padding(.top, 8)
                     .padding(.bottom, 56)
@@ -192,7 +144,7 @@ struct UtilitiesView: View {
             .scrollIndicators(.hidden)
             .scrollEdgeEffectStyle(.soft, for: .top)
         }
-        .navigationTitle("水电费查询")
+        .navigationTitle("水电费")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .fontDesign(.rounded)
@@ -205,33 +157,32 @@ struct UtilitiesContent: View {
     @EnvironmentObject private var store: DormStore
     @EnvironmentObject private var model: DormAppModel
 
-    var showAPI: Bool
+    var showRoomBar: Bool = true
 
     @State private var showRoomPicker = false
     @State private var selectedMeterID: String?
 
     private var detail: SWAERoomDetail? { store.roomDetail }
     private var isLive: Bool { detail != nil }
-    private var isDemoMode: Bool { !store.isLoggedIn && detail == nil }
+    private var isDemoMode: Bool { store.isDemoMode && detail == nil }
     private var boundRooms: [SWAERoomSummary] { store.boundRooms }
-
-    private var statusTitle: String {
-        if isLive { return "实时数据 · 完美校园 SWAE" }
-        return store.isLoggedIn
-            ? "未获取实时数据 · 可选择宿舍房间"
-            : "演示数据 · 本地体验"
-    }
 
     private var currentRoomName: String {
         if let name = store.selectedRoomName, !name.isEmpty { return name }
         if let name = detail?.roomFullName, !name.isEmpty { return name }
-        return store.isLoggedIn ? "尚未选择宿舍" : store.roomName
+        return isDemoMode ? "3栋 412" : "水电余量"
+    }
+
+    private var subtitleText: String {
+        if isLive { return store.lastUtilitySyncText }
+        if isDemoMode { return "演示数据" }
+        return "选择宿舍查看余量"
     }
 
     var body: some View {
         VStack(spacing: AppTheme.moduleSpacing) {
-            if showAPI {
-                topBar
+            if showRoomBar {
+                roomBar
             }
 
             if let detail {
@@ -242,17 +193,14 @@ struct UtilitiesContent: View {
                    days <= 7 {
                     lowBalanceCard(detail: detail, meter: meter, days: days)
                 }
+                tariffFootnote
+            } else if isDemoMode {
+                demoBalanceSection
+                demoChartSection
+                roomPickerPrompt
             } else {
-                if isDemoMode {
-                    demoBalanceSection
-                    demoChartSection
-                } else {
-                    emptyRoomState
-                }
                 roomPickerPrompt
             }
-
-            sourceCard
         }
         .sheet(isPresented: $showRoomPicker) {
             RoomPickerSheetView()
@@ -264,24 +212,11 @@ struct UtilitiesContent: View {
         }
     }
 
-    // MARK: 顶部栏
+    // MARK: 房间栏
 
-    private var topBar: some View {
+    private var roomBar: some View {
         HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(isLive ? AppTheme.onlineGreen : AppTheme.warningAmber)
-                        .frame(width: 6, height: 6)
-                        .shadow(
-                            color: (isLive ? AppTheme.onlineGreen : AppTheme.warningAmber).opacity(0.55),
-                            radius: 4
-                        )
-                    Text(statusTitle)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-
+            VStack(alignment: .leading, spacing: 2) {
                 if boundRooms.count > 1 {
                     Menu {
                         ForEach(boundRooms) { room in
@@ -300,7 +235,7 @@ struct UtilitiesContent: View {
                         Button {
                             showRoomPicker = true
                         } label: {
-                            Label("选择其他宿舍房间…", systemImage: "building.2")
+                            Label("选择其他宿舍…", systemImage: "building.2")
                         }
                     } label: {
                         roomTitle(showChevron: true)
@@ -309,12 +244,17 @@ struct UtilitiesContent: View {
                 } else {
                     roomTitle(showChevron: false)
                 }
+
+                Text(subtitleText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 4)
 
-            glassButton(
-                symbol: "building.2.fill",
+            glassActionButton(
+                symbol: "building.2",
                 title: "选房",
                 label: "选择宿舍房间",
                 busy: false
@@ -323,21 +263,24 @@ struct UtilitiesContent: View {
                 showRoomPicker = true
             }
 
-            glassButton(
-                symbol: "arrow.clockwise",
-                title: "刷新",
-                label: "刷新实时水电",
-                busy: model.isUtilitiesLoading
-            ) {
-                Task { await model.refreshUtilities() }
+            if isLive || store.isLoggedIn {
+                glassActionButton(
+                    symbol: "arrow.clockwise",
+                    title: nil,
+                    label: "刷新水电数据",
+                    busy: model.isUtilitiesLoading
+                ) {
+                    Task { await model.refreshUtilities() }
+                }
             }
         }
+        .padding(.horizontal, 2)
     }
 
     private func roomTitle(showChevron: Bool) -> some View {
         HStack(spacing: 4) {
             Text(currentRoomName)
-                .font(.system(size: 20, weight: .semibold, design: .rounded))
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .foregroundStyle(.primary)
@@ -351,9 +294,9 @@ struct UtilitiesContent: View {
         .contentShape(Rectangle())
     }
 
-    private func glassButton(
+    private func glassActionButton(
         symbol: String,
-        title: String,
+        title: String?,
         label: String,
         busy: Bool,
         action: @escaping () -> Void
@@ -365,16 +308,18 @@ struct UtilitiesContent: View {
                         .controlSize(.small)
                 } else {
                     Image(systemName: symbol)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.primary)
                 }
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                if let title {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 36)
+            .padding(.horizontal, title == nil ? 0 : 12)
+            .frame(minWidth: 34, minHeight: 34)
             .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
@@ -382,35 +327,23 @@ struct UtilitiesContent: View {
         .accessibilityLabel(label)
     }
 
-    // MARK: 实时表计
+    // MARK: 表计卡片
 
     private func liveMeterSection(_ detail: SWAERoomDetail) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("实时表计")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                statusBadge("实时", tint: AppTheme.onlineGreen)
-                Spacer()
-                Text(store.lastUtilitySyncText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 4)
-
+        Group {
             if detail.meters.isEmpty {
-                VStack(spacing: 7) {
+                VStack(spacing: 8) {
                     Image(systemName: "gauge.with.dots.needle.50percent")
-                        .font(.system(size: 22, weight: .light))
+                        .font(.system(size: 24, weight: .light))
                         .foregroundStyle(.secondary)
-                    Text("该房间暂未返回表计数据")
-                        .font(.system(size: 13, weight: .medium))
-                    Text("可稍后刷新，或在完美校园完成房间绑定")
-                        .font(.system(size: 11))
+                    Text("暂无表计数据")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("可稍后刷新或切换其他宿舍")
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
+                .padding(.vertical, 26)
                 .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
             } else {
                 LazyVGrid(
@@ -421,14 +354,18 @@ struct UtilitiesContent: View {
                     spacing: AppTheme.tileSpacing
                 ) {
                     ForEach(detail.meters) { meter in
-                        SWAEMeterCard(meter: meter, kind: detail.kind(for: meter))
+                        SWAEMeterCard(
+                            title: detail.displayName(for: meter),
+                            meter: meter,
+                            kind: detail.kind(for: meter)
+                        )
                     }
                 }
             }
         }
     }
 
-    // MARK: 趋势
+    // MARK: 趋势图
 
     private func usageSection(_ detail: SWAERoomDetail) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -437,12 +374,14 @@ struct UtilitiesContent: View {
             }
 
             if let meter = chartMeter(in: detail) {
+                let kind = detail.kind(for: meter)
+                let meterName = detail.displayName(for: meter)
                 UsageChartCard(
-                    title: chartTitle(for: detail.kind(for: meter)),
-                    subtitle: "\(meter.deviceName) · 近 7 日均值",
+                    title: chartTitle(for: kind),
+                    meterName: meterName,
                     points: meter.weekUseList,
-                    unit: detail.kind(for: meter).unit,
-                    tint: detail.kind(for: meter).tint
+                    unit: kind.unit,
+                    tint: kind.tint
                 )
             }
         }
@@ -453,6 +392,7 @@ struct UtilitiesContent: View {
             HStack(spacing: 8) {
                 ForEach(detail.meters) { meter in
                     let kind = detail.kind(for: meter)
+                    let name = detail.displayName(for: meter)
                     let selected = chartMeter(in: detail)?.id == meter.id
                     Button {
                         withAnimation(AppTheme.stateSpring) {
@@ -463,25 +403,25 @@ struct UtilitiesContent: View {
                         HStack(spacing: 5) {
                             Image(systemName: kind.symbol)
                                 .font(.system(size: 10, weight: .semibold))
-                            Text(meter.deviceName)
-                                .font(.system(size: 11, weight: .semibold))
+                            Text(name)
+                                .font(.system(size: 12, weight: .semibold))
                                 .lineLimit(1)
                         }
                         .foregroundStyle(selected ? kind.tint : Color.secondary)
-                        .padding(.horizontal, 11)
-                        .frame(height: 30)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
                         .background {
                             Capsule(style: .continuous)
                                 .fill(
                                     selected
                                         ? kind.tint.opacity(0.15)
-                                        : Color.primary.opacity(0.045)
+                                        : Color.primary.opacity(0.05)
                                 )
                         }
                         .overlay {
                             Capsule(style: .continuous)
                                 .strokeBorder(
-                                    selected ? kind.tint.opacity(0.42) : .clear,
+                                    selected ? kind.tint.opacity(0.4) : .clear,
                                     lineWidth: 1
                                 )
                         }
@@ -489,7 +429,7 @@ struct UtilitiesContent: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 2)
         }
         .scrollIndicators(.hidden)
     }
@@ -513,48 +453,33 @@ struct UtilitiesContent: View {
     // MARK: 演示数据
 
     private var demoBalanceSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text("演示账单")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                statusBadge("演示数据", tint: AppTheme.warningAmber)
-                Spacer()
-                Text(monthTitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 4)
+        HStack(spacing: AppTheme.tileSpacing) {
+            BalanceCard(
+                title: "电表",
+                value: String(format: "%.1f", store.electricityKWh),
+                unit: "kWh",
+                caption: "约可用 \(store.estimatedElectricityDays) 天",
+                fraction: min(1, store.electricityKWh / 100),
+                tint: AppTheme.electricYellow,
+                symbol: "bolt.fill"
+            )
 
-            HStack(spacing: AppTheme.tileSpacing) {
-                BalanceCard(
-                    title: "剩余电量",
-                    value: String(format: "%.1f", store.electricityKWh),
-                    unit: "kWh",
-                    caption: "约可用 \(store.estimatedElectricityDays) 天",
-                    fraction: min(1, store.electricityKWh / 100),
-                    tint: AppTheme.electricYellow,
-                    symbol: "bolt.fill",
-                    fractionCaption: "\(Int(min(100, store.electricityKWh)))%"
-                )
-
-                BalanceCard(
-                    title: "水费余额",
-                    value: String(format: "¥%.2f", store.waterBalance),
-                    unit: "",
-                    caption: "本月用水 3.2 m³",
-                    fraction: min(1, store.waterBalance / 50),
-                    tint: AppTheme.waterBlue,
-                    symbol: "drop.fill",
-                    fractionCaption: "\(Int(store.waterBalance / 50 * 100))%"
-                )
-            }
+            BalanceCard(
+                title: "水表",
+                value: String(format: "%.1f", store.waterBalance),
+                unit: "t",
+                caption: "本月用水 3.2 t",
+                fraction: min(1, store.waterBalance / 30),
+                tint: AppTheme.waterBlue,
+                symbol: "drop.fill"
+            )
         }
     }
 
     private var demoChartSection: some View {
         UsageChartCard(
             title: "近 7 日用电",
-            subtitle: "演示用量 · 日均 \(String(format: "%.1f", store.averageElectricity)) kWh",
+            meterName: "电表",
             points: demoUsagePoints,
             unit: "kWh",
             tint: AppTheme.electricYellow
@@ -565,50 +490,36 @@ struct UtilitiesContent: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "MM-dd"
+        let weekFormatter = DateFormatter()
+        weekFormatter.locale = Locale(identifier: "zh_CN")
+        weekFormatter.dateFormat = "EEE"
         return store.electricityUsage.map {
-            SWAEDailyUsage(dateText: formatter.string(from: $0.date), use: $0.kwh)
+            SWAEDailyUsage(
+                dateText: formatter.string(from: $0.date),
+                weekday: weekFormatter.string(from: $0.date),
+                use: $0.kwh
+            )
         }
     }
 
-    private var emptyRoomState: some View {
-        VStack(spacing: 10) {
-            ZStack {
-                Circle().fill(AppTheme.warningAmber.opacity(0.14))
-                Image(systemName: "bolt.slash.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(AppTheme.warningAmber)
-            }
-            .frame(width: 48, height: 48)
-
-            Text("尚未获取实时水电")
-                .font(.system(size: 16, weight: .semibold, design: .rounded))
-            Text("当前账号未返回已绑定房间。你可以直接选择宿舍房间，读取该房间的实时水电。")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(18)
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
-    }
+    // MARK: 选房引导
 
     private var roomPickerPrompt: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(AppTheme.actionBlue.opacity(0.14))
-                Image(systemName: "building.2.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(AppTheme.actionBlue)
+                    .fill(AppTheme.electricYellow.opacity(0.14))
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(AppTheme.electricYellow)
             }
-            .frame(width: 48, height: 48)
+            .frame(width: 52, height: 52)
 
-            VStack(spacing: 4) {
-                Text("选择你的宿舍房间")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                Text("校区 → 楼栋 → 楼层 → 房间，直接查询真实水电；若该房间尚未绑定表计，会提示先前往完美校园绑定。")
-                    .font(.system(size: 11))
+            VStack(spacing: 5) {
+                Text("查看宿舍水电")
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                Text("选择所在校区与宿舍号，即可查看剩余电量和近 7 日用量")
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -625,14 +536,8 @@ struct UtilitiesContent: View {
             }
             .buttonStyle(.glassProminent)
             .tint(AppTheme.actionBlue)
-
-            if !store.isLoggedIn {
-                Text("未登录也可选房查询 · 登录后将自动同步已绑定房间")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            }
         }
-        .padding(18)
+        .padding(20)
         .dormGlassCard(corner: AppTheme.tileCorner)
     }
 
@@ -644,6 +549,7 @@ struct UtilitiesContent: View {
         days: Int
     ) -> some View {
         let kind = detail.kind(for: meter)
+        let name = detail.displayName(for: meter)
         return HStack(spacing: 12) {
             ZStack {
                 Circle().fill(AppTheme.warningAmber.opacity(0.16))
@@ -654,10 +560,10 @@ struct UtilitiesContent: View {
             .frame(width: 38, height: 38)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("低余量提醒")
+                Text("余量偏低")
                     .font(.system(size: 14, weight: .semibold))
-                Text("\(meter.deviceName) 约可用 \(days) 天，建议及时充值")
-                    .font(.system(size: 11))
+                Text("\(name)约可用 \(days) 天，记得及时充值")
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -674,43 +580,14 @@ struct UtilitiesContent: View {
         .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
     }
 
-    // MARK: 数据来源尾卡
+    // MARK: 资费标准注脚
 
-    private var sourceCard: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppTheme.waterBlue)
-
-                Text(model.utilityConfig?.systemName ?? SWAEClient.systemName)
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-
-                Spacer()
-
-                statusBadge(
-                    isLive ? "实时" : (store.isLoggedIn ? "未同步" : "演示"),
-                    tint: isLive ? AppTheme.onlineGreen : AppTheme.warningAmber
-                )
-            }
-
-            Text(feeLine)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 6) {
-                Text(store.lastUtilitySyncText)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                Spacer()
-                Text("只读查询 · 不产生交易")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(16)
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
+    private var tariffFootnote: some View {
+        Text(feeLine)
+            .font(.system(size: 11))
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 2)
     }
 
     private var feeLine: String {
@@ -718,7 +595,7 @@ struct UtilitiesContent: View {
         let electric = priceText(config?.electricityUnitPrice ?? 0.65)
         let cold = priceText(config?.coldWaterUnitPrice ?? 1.5)
         let hot = priceText(config?.hotWaterUnitPrice ?? 2.5)
-        return "学校代码 2502 · 电 \(electric)元/度 · 冷水 \(cold)元/吨 · 热水 \(hot)元/吨"
+        return "电 \(electric)元/度 · 冷水 \(cold)元/吨 · 热水 \(hot)元/吨"
     }
 
     private func priceText(_ value: Double) -> String {
@@ -730,33 +607,18 @@ struct UtilitiesContent: View {
         }
         return String(format: "%.2f", value)
     }
-
-    private var monthTitle: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月"
-        return formatter.string(from: Date())
-    }
-
-    private func statusBadge(_ text: String, tint: Color) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Capsule(style: .continuous).fill(tint.opacity(0.13)))
-    }
 }
 
 // MARK: - 表计卡片
 
 private struct SWAEMeterCard: View {
+    let title: String
     let meter: SWAEMeterDetail
     let kind: SWAEMeterKind
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 ZStack {
                     Circle().fill(kind.tint.opacity(0.16))
                     Image(systemName: kind.symbol)
@@ -767,62 +629,63 @@ private struct SWAEMeterCard: View {
 
                 Spacer(minLength: 2)
 
-                Text(meter.isOn ? kind.statusOnText : kind.statusOffText)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(meter.isOn ? AppTheme.onlineGreen : AppTheme.dangerRed)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background {
-                        Capsule(style: .continuous)
-                            .fill(
-                                (meter.isOn ? AppTheme.onlineGreen : AppTheme.dangerRed)
-                                    .opacity(0.13)
-                            )
-                    }
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(meter.isOn ? AppTheme.onlineGreen : AppTheme.dangerRed)
+                        .frame(width: 5, height: 5)
+                    Text(meter.isOn ? kind.statusOnText : kind.statusOffText)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(meter.isOn ? AppTheme.onlineGreen : AppTheme.dangerRed)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background {
+                    Capsule(style: .continuous)
+                        .fill(
+                            (meter.isOn ? AppTheme.onlineGreen : AppTheme.dangerRed)
+                                .opacity(0.12)
+                        )
+                }
             }
 
-            Text(meter.deviceName)
-                .font(.system(size: 12, weight: .medium))
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.top, 8)
+                .padding(.top, 10)
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(meter.remaining.swaeText)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.62)
                 if !kind.unit.isEmpty {
                     Text(kind.unit)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 1)
+            .padding(.top, 2)
 
             HStack(spacing: 4) {
-                Text("今日 \(meter.todayUse.swaeText) \(kind.unit)")
+                Text("今日 \(meter.todayUse.swaeText)\(kind.unit)")
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("·")
+                    .minimumScaleFactor(0.75)
                 if let days = meter.estimatedDays {
-                    Text("约可用 \(days) 天")
+                    Text("·")
+                    Text("约 \(days) 天")
                         .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                } else {
-                    Text("用量稳定")
-                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                 }
             }
-            .font(.system(size: 10))
+            .font(.system(size: 11))
             .foregroundStyle(.secondary)
-            .padding(.top, 5)
+            .padding(.top, 6)
 
             if hasBreakdown {
                 Divider().opacity(0.35).padding(.top, 8)
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     if let subsidy = meter.sumSub, subsidy > 0 {
                         Text("补贴 \(subsidy.swaeText)")
                     }
@@ -830,7 +693,7 @@ private struct SWAEMeterCard: View {
                         Text("自购 \(purchase.swaeText)")
                     }
                 }
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .padding(.top, 6)
@@ -838,8 +701,8 @@ private struct SWAEMeterCard: View {
 
             Spacer(minLength: 0)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 166, alignment: .topLeading)
+        .padding(15)
+        .frame(maxWidth: .infinity, minHeight: 156, alignment: .topLeading)
         .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
     }
 
@@ -848,14 +711,17 @@ private struct SWAEMeterCard: View {
     }
 }
 
-// MARK: - 用量图
+// MARK: - 可交互用量曲线图
 
 private struct UsageChartCard: View {
     let title: String
-    let subtitle: String
+    let meterName: String
     let points: [SWAEDailyUsage]
     let unit: String
     let tint: Color
+
+    @State private var selectedDate: String?
+    @Environment(\.colorScheme) private var scheme
 
     private var total: Double { points.reduce(0) { $0 + $1.use } }
     private var average: Double {
@@ -863,31 +729,17 @@ private struct UsageChartCard: View {
         return total / Double(points.count)
     }
     private var maxValue: Double {
-        max(1, (points.map(\.use).max() ?? 1) * 1.25)
+        max(1, (points.map(\.use).max() ?? 1) * 1.28)
+    }
+
+    private var selectedPoint: SWAEDailyUsage? {
+        guard let selectedDate else { return nil }
+        return points.first { $0.shortDateText == selectedDate }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text(points.isEmpty ? subtitle : "\(subtitle) · 日均 \(average.swaeText) \(unit)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                Spacer(minLength: 6)
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(total.swaeText)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Text(unit)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
+            headerRow
 
             if points.isEmpty {
                 VStack(spacing: 6) {
@@ -899,68 +751,175 @@ private struct UsageChartCard: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 132)
+                .frame(height: 148)
             } else {
-                Chart {
-                    ForEach(points) { point in
-                        AreaMark(
-                            x: .value("日期", point.shortDateText),
-                            y: .value("用量", point.use)
-                        )
-                        .interpolationMethod(.catmullRom)
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [tint.opacity(0.34), tint.opacity(0.02)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-
-                        LineMark(
-                            x: .value("日期", point.shortDateText),
-                            y: .value("用量", point.use)
-                        )
-                        .interpolationMethod(.catmullRom)
-                        .foregroundStyle(tint)
-                        .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round))
-
-                        PointMark(
-                            x: .value("日期", point.shortDateText),
-                            y: .value("用量", point.use)
-                        )
-                        .foregroundStyle(tint)
-                        .symbolSize(16)
-                    }
-
-                    if average > 0 {
-                        RuleMark(y: .value("日均", average))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
-                            .foregroundStyle(Color.secondary.opacity(0.4))
-                    }
-                }
-                .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 7)) { value in
-                        AxisValueLabel {
-                            if let label = value.as(String.self) {
-                                Text(label)
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundStyle(Color.secondary)
-                            }
-                        }
-                    }
-                }
-                .chartYAxis(.hidden)
-                .chartYScale(domain: 0...maxValue)
-                .chartLegend(.hidden)
-                .frame(height: 142)
+                interactiveChart
             }
         }
         .padding(18)
         .dormGlassCard(corner: AppTheme.tileCorner)
+        .onChange(of: points.map(\.shortDateText)) { _, _ in
+            selectedDate = nil
+        }
+        .onChange(of: selectedDate) { oldValue, newValue in
+            if newValue != nil, newValue != oldValue {
+                Haptics.impact(.light)
+            }
+        }
+    }
+
+    private var headerRow: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+
+                if let selected = selectedPoint {
+                    Text(selectedDateLabel(selected))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .lineLimit(1)
+                } else {
+                    Text(points.isEmpty ? meterName : "\(meterName) · 日均 \(average.swaeText) \(unit)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+
+            Spacer(minLength: 6)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text((selectedPoint?.use ?? total).swaeText)
+                        .font(.system(size: 23, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(selectedPoint != nil ? tint : .primary)
+                        .contentTransition(.numericText())
+                    Text(unit)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(selectedPoint != nil ? "当日用量" : "近 7 日合计")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .animation(.easeInOut(duration: 0.16), value: selectedDate)
+    }
+
+    private var interactiveChart: some View {
+        VStack(spacing: 8) {
+            Chart {
+                ForEach(points) { point in
+                    let isSelected = selectedPoint?.id == point.id
+
+                    AreaMark(
+                        x: .value("日期", point.shortDateText),
+                        y: .value("用量", point.use)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [tint.opacity(0.32), tint.opacity(0.02)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                    LineMark(
+                        x: .value("日期", point.shortDateText),
+                        y: .value("用量", point.use)
+                    )
+                    .interpolationMethod(.catmullRom)
+                    .foregroundStyle(tint)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
+
+                    PointMark(
+                        x: .value("日期", point.shortDateText),
+                        y: .value("用量", point.use)
+                    )
+                    .foregroundStyle(tint)
+                    .symbolSize(isSelected ? 78 : 22)
+                }
+
+                if average > 0, selectedPoint == nil {
+                    RuleMark(y: .value("日均", average))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                }
+
+                if let selected = selectedPoint {
+                    RuleMark(x: .value("日期", selected.shortDateText))
+                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [3, 3]))
+                        .foregroundStyle(tint.opacity(0.65))
+                        .annotation(
+                            position: .top,
+                            spacing: 6,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
+                            HStack(spacing: 4) {
+                                Text(selected.shortDateText)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                Text("\(selected.use.swaeText) \(unit)")
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(tint)
+                            }
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background {
+                                Capsule(style: .continuous)
+                                    .fill(scheme == .dark ? Color(hex: 0x162236) : Color.white)
+                                    .shadow(color: Color.black.opacity(scheme == .dark ? 0.35 : 0.10), radius: 8, y: 3)
+                            }
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .strokeBorder(tint.opacity(0.35), lineWidth: 0.8)
+                            }
+                        }
+                }
+            }
+            .chartXSelection(value: $selectedDate)
+            .chartXAxis {
+                AxisMarks(values: .automatic(desiredCount: 7)) { value in
+                    AxisValueLabel {
+                        if let label = value.as(String.self) {
+                            let highlighted = selectedDate == label
+                            Text(label)
+                                .font(.system(size: 10, weight: highlighted ? .bold : .medium))
+                                .foregroundStyle(highlighted ? tint : Color.secondary)
+                        }
+                    }
+                }
+            }
+            .chartYAxis(.hidden)
+            .chartYScale(domain: 0...maxValue)
+            .chartLegend(.hidden)
+            .frame(height: 160)
+            .padding(.top, 12)
+
+            if selectedPoint == nil {
+                Text("滑动曲线查看每日用量")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+    }
+
+    private func selectedDateLabel(_ point: SWAEDailyUsage) -> String {
+        if let weekday = point.weekday, !weekday.isEmpty {
+            return "\(point.shortDateText) · \(weekday)"
+        }
+        return point.shortDateText
     }
 }
 
-// MARK: - 余额卡片
+// MARK: - 演示余额卡片
 
 private struct BalanceCard: View {
     let title: String
@@ -970,36 +929,26 @@ private struct BalanceCard: View {
     let fraction: Double
     let tint: Color
     let symbol: String
-    let fractionCaption: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                ZStack {
-                    Circle().fill(tint.opacity(0.16))
-                    Image(systemName: symbol)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(tint)
-                }
-                .frame(width: 32, height: 32)
-
-                Spacer()
-
-                Text(fractionCaption)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            ZStack {
+                Circle().fill(tint.opacity(0.16))
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(tint)
             }
+            .frame(width: 32, height: 32)
 
             Spacer(minLength: 8)
 
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -1009,7 +958,7 @@ private struct BalanceCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(.top, 1)
+            .padding(.top, 2)
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -1031,7 +980,7 @@ private struct BalanceCard: View {
         }
         .padding(15)
         .frame(maxWidth: .infinity)
-        .frame(height: 154)
+        .frame(height: 152)
         .dormGlassCard(corner: AppTheme.tileCorner)
     }
 }
@@ -1075,7 +1024,6 @@ struct ClimateControlView: View {
             ScrollView {
                 VStack(spacing: AppTheme.moduleSpacing) {
                     climateCard
-                    integrationNote
                 }
                 .padding(.horizontal, AppTheme.screenPadding)
                 .padding(.top, 12)
@@ -1097,13 +1045,13 @@ struct ClimateControlView: View {
                         .font(.system(size: 20, weight: .semibold, design: .rounded))
                     HStack(spacing: 6) {
                         Circle().fill(AppTheme.warningAmber).frame(width: 6, height: 6)
-                        Text("网关未连接")
+                        Text("未连接")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                Text("即将接入")
+                Text("即将支持")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 8)
@@ -1163,7 +1111,7 @@ struct ClimateControlView: View {
             }
 
             Button {
-                model.showToast("空调网关接入后即可远程预冷", style: .info)
+                model.showToast("空调控制功能即将开放", style: .info)
             } label: {
                 Label("连接空调", systemImage: "air.conditioner.horizontal.fill")
                     .font(.system(size: 14, weight: .semibold))
@@ -1176,31 +1124,6 @@ struct ClimateControlView: View {
         .padding(22)
         .dormGlassCard(corner: AppTheme.heroCorner)
     }
-
-    private var integrationNote: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("模块化扩展位", systemImage: "puzzlepiece.extension.fill")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-            Text("空调控温将通过宿舍网关或红外桥接接入。接口预留后，可在回寝前远程预冷、定时关机，并与门锁开锁事件联动。")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 6) {
-                Text("POST")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(AppTheme.climateBlue)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(AppTheme.climateBlue.opacity(0.12)))
-                Text("/dorm/climate/control")
-                    .font(.system(size: 11, design: .monospaced))
-                Spacer()
-                Text("待接入").font(.system(size: 10)).foregroundStyle(.tertiary)
-            }
-        }
-        .padding(16)
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
-    }
 }
 
 // MARK: - 校园一卡通扩展位
@@ -1209,12 +1132,6 @@ struct CampusCardView: View {
     @EnvironmentObject private var store: DormStore
     @EnvironmentObject private var model: DormAppModel
 
-    private let transactions: [(String, String, String)] = [
-        ("食堂 · 三楼档口", "今天 12:08", "-12.50"),
-        ("校园超市", "昨天 19:42", "-8.90"),
-        ("热水充值", "11月20日", "+30.00")
-    ]
-
     var body: some View {
         ZStack {
             AmbientBackgroundView(state: model.doorState)
@@ -1222,8 +1139,6 @@ struct CampusCardView: View {
             ScrollView {
                 VStack(spacing: AppTheme.moduleSpacing) {
                     cardVisual
-                    transactionsCard
-                    integrationNote
                 }
                 .padding(.horizontal, AppTheme.screenPadding)
                 .padding(.top, 12)
@@ -1243,29 +1158,28 @@ struct CampusCardView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "graduationcap.fill")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("DORM CAMPUS CARD")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .tracking(1.2)
+                    Text("校园一卡通")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
                 }
                 Spacer()
-                Text("即将接入")
-                    .font(.system(size: 9, weight: .semibold))
-                    .padding(.horizontal, 7)
+                Text("即将支持")
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 3)
-                    .background(Capsule().fill(.white.opacity(0.16)))
+                    .background(Capsule().fill(.white.opacity(0.18)))
             }
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(.white.opacity(0.92))
 
             Spacer(minLength: 18)
 
-            Text("校园卡余额")
+            Text("卡内余额")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
+                .foregroundStyle(.white.opacity(0.75))
 
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text("¥")
                     .font(.system(size: 18, weight: .semibold, design: .rounded))
-                Text(String(format: "%.2f", store.cardBalance))
+                Text(store.isDemoMode ? String(format: "%.2f", store.cardBalance) : "—")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
                     .monospacedDigit()
             }
@@ -1274,13 +1188,8 @@ struct CampusCardView: View {
             Spacer(minLength: 16)
 
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(store.userName ?? "宿享用户")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("**** **** **** 0412")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.72))
-                }
+                Text(store.userName ?? "未登录")
+                    .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Image(systemName: "wave.3.right")
                     .font(.system(size: 18, weight: .medium))
@@ -1289,7 +1198,7 @@ struct CampusCardView: View {
             .foregroundStyle(.white)
         }
         .padding(22)
-        .frame(height: 218)
+        .frame(height: 210)
         .background {
             RoundedRectangle(cornerRadius: AppTheme.heroCorner, style: .continuous)
                 .fill(
@@ -1305,79 +1214,5 @@ struct CampusCardView: View {
                 .strokeBorder(.white.opacity(0.22), lineWidth: 0.8)
         }
         .shadow(color: AppTheme.campusPurple.opacity(0.28), radius: 22, y: 10)
-    }
-
-    private var transactionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("近期流水")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
-                Spacer()
-                Text("演示数据")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            ForEach(Array(transactions.enumerated()), id: \.offset) { index, item in
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(AppTheme.campusPurple.opacity(0.14))
-                        Image(systemName: item.2.hasPrefix("+") ? "arrow.down.left" : "fork.knife")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.campusPurple)
-                    }
-                    .frame(width: 32, height: 32)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.0)
-                            .font(.system(size: 13, weight: .medium))
-                        Text(item.1)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text(item.2)
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(item.2.hasPrefix("+") ? AppTheme.onlineGreen : Color.primary)
-                }
-
-                if index < transactions.count - 1 {
-                    Divider().opacity(0.4)
-                }
-            }
-        }
-        .padding(16)
-        .dormGlassCard(corner: AppTheme.tileCorner)
-    }
-
-    private var integrationNote: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("模块化扩展位", systemImage: "creditcard.fill")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.campusPurple)
-            Text("接入校园一卡通后，可查询实时余额、消费流水，并在余额不足时提醒充值。当前展示为演示数据。")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 10) {
-                Button("充值") {
-                    model.showToast("一卡通充值将在接入后开放", style: .info)
-                }
-                .buttonStyle(.glass)
-                .frame(maxWidth: .infinity)
-
-                Button("挂失") {
-                    model.showToast("挂失入口将在接入后开放", style: .info)
-                }
-                .buttonStyle(.glass)
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(16)
-        .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
     }
 }

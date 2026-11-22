@@ -87,6 +87,7 @@ struct PersistedState: Codable {
     var selectedRoomName: String?
     var roomDetail: SWAERoomDetail?
     var lastUtilitySyncDate: Date?
+    var demoModeEnabled: Bool?
 
     static func fresh() -> PersistedState {
         let calendar = Calendar.current
@@ -99,47 +100,8 @@ struct PersistedState: Codable {
             )
         }
 
-        let seededHistory = [
-            UnlockRecord(
-                date: Date().addingTimeInterval(-2.1 * 3600),
-                deviceID: DoorDevice.demo.deviceId,
-                deviceName: DoorDevice.demo.name,
-                action: .unlock,
-                channel: .demo,
-                detail: "远程开门 · 演示门锁",
-                isDemo: true
-            ),
-            UnlockRecord(
-                date: Date().addingTimeInterval(-2.1 * 3600 + 35),
-                deviceID: DoorDevice.demo.deviceId,
-                deviceName: DoorDevice.demo.name,
-                action: .lock,
-                channel: .autoRelock,
-                detail: "35 秒后自动回锁",
-                isDemo: true
-            ),
-            UnlockRecord(
-                date: calendar.date(byAdding: .hour, value: -20, to: Date()) ?? Date(),
-                deviceID: DoorDevice.demo.deviceId,
-                deviceName: DoorDevice.demo.name,
-                action: .unlock,
-                channel: .demo,
-                detail: "远程开门 · 演示门锁",
-                isDemo: true
-            ),
-            UnlockRecord(
-                date: calendar.date(byAdding: .hour, value: -44, to: Date()) ?? Date(),
-                deviceID: DoorDevice.demo.deviceId,
-                deviceName: DoorDevice.demo.name,
-                action: .unlock,
-                channel: .demo,
-                detail: "远程开门 · 演示门锁",
-                isDemo: true
-            )
-        ]
-
         return PersistedState(
-            schemaVersion: 1,
+            schemaVersion: 2,
             deviceId: "wx-door-\(Int(Date().timeIntervalSince1970))",
             sessionId: nil,
             sessionTimestamp: nil,
@@ -148,7 +110,7 @@ struct PersistedState: Codable {
             phone: nil,
             isLoggedIn: false,
             devices: [],
-            history: seededHistory,
+            history: [],
             themeMode: .system,
             enabledModuleIDs: ModuleRegistry.defaultEnabledIDs,
             autoRelockSeconds: 30,
@@ -157,12 +119,13 @@ struct PersistedState: Codable {
             waterBalance: 18.3,
             cardBalance: 128.5,
             electricityUsage: usage,
-            hasSeededDemoHistory: true,
+            hasSeededDemoHistory: false,
             boundRooms: [],
             selectedRoomVerify: nil,
             selectedRoomName: nil,
             roomDetail: nil,
-            lastUtilitySyncDate: nil
+            lastUtilitySyncDate: nil,
+            demoModeEnabled: false
         )
     }
 }
@@ -201,6 +164,9 @@ final class DormStore: ObservableObject {
         if state.autoRelockSeconds < 10 {
             state.autoRelockSeconds = 30
         }
+        if state.isLoggedIn || !(state.demoModeEnabled ?? false) {
+            state.history.removeAll { $0.isDemo }
+        }
         persistence()
     }
 
@@ -208,6 +174,7 @@ final class DormStore: ObservableObject {
 
     var deviceId: String { state.deviceId }
     var isLoggedIn: Bool { state.isLoggedIn }
+    var isDemoMode: Bool { !state.isLoggedIn && (state.demoModeEnabled ?? false) }
     var userName: String? { state.userName }
     var phone: String? { state.phone }
     var outid: String? { state.outid }
@@ -215,16 +182,24 @@ final class DormStore: ObservableObject {
     var sessionTimestamp: Date? { state.sessionTimestamp }
     var rememberCredentials: Bool { state.rememberCredentials }
 
-    /// 演示模式固定 1 把主门锁；真实账号使用 pageList 结果。
+    /// 真实账号使用已授权门锁；演示模式提供 1 把模拟门锁；未登录且非演示模式为空。
     var devices: [DoorDevice] {
-        isLoggedIn ? state.devices : [DoorDevice.demo]
+        if isLoggedIn { return state.devices }
+        if isDemoMode { return [DoorDevice.demo] }
+        return []
     }
 
     var roomName: String {
-        guard let first = devices.first else { return isLoggedIn ? "完美校园" : "3栋 412" }
-        if let room = first.roomName, !room.isEmpty { return room }
-        let prefix = first.name.components(separatedBy: " ").dropLast().joined(separator: " ")
-        return prefix.isEmpty ? first.name : prefix
+        if let first = devices.first {
+            if let room = first.roomName, !room.isEmpty { return room }
+            let prefix = first.name.components(separatedBy: " ").dropLast().joined(separator: " ")
+            if !prefix.isEmpty { return prefix }
+            return first.name
+        }
+        if let selected = state.selectedRoomName, !selected.isEmpty {
+            return selected
+        }
+        return isDemoMode ? "3栋 412" : "我的宿舍"
     }
 
     var sessionShortID: String {
@@ -233,7 +208,7 @@ final class DormStore: ObservableObject {
     }
 
     var sessionAgeText: String {
-        guard let timestamp = state.sessionTimestamp else { return "尚未登录" }
+        guard let timestamp = state.sessionTimestamp else { return "未登录" }
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.unitsStyle = .short
@@ -241,24 +216,24 @@ final class DormStore: ObservableObject {
     }
 
     var sessionStatusText: String {
-        if isLoggedIn {
-            return "登录态已复用 · \(sessionAgeText)"
-        }
-        return "演示模式 · 本地体验，不触达真实门锁"
+        if isLoggedIn { return "已连接" }
+        if isDemoMode { return "演示模式" }
+        return "未登录"
     }
 
     var history: [UnlockRecord] {
-        state.history.sorted { $0.date > $1.date }
+        let filtered = isDemoMode ? state.history : state.history.filter { !$0.isDemo }
+        return filtered.sorted { $0.date > $1.date }
     }
 
     var historyThisWeekCount: Int {
-        guard let week = weekCalendar.dateInterval(of: .weekOfYear, for: Date()) else { return state.history.count }
-        return state.history.filter { week.contains($0.date) }.count
+        guard let week = weekCalendar.dateInterval(of: .weekOfYear, for: Date()) else { return history.count }
+        return history.filter { week.contains($0.date) }.count
     }
 
     var unlockThisWeekCount: Int {
         guard let week = weekCalendar.dateInterval(of: .weekOfYear, for: Date()) else { return 0 }
-        return state.history.filter { week.contains($0.date) && $0.action == .unlock }.count
+        return history.filter { week.contains($0.date) && $0.action == .unlock }.count
     }
 
     private var weekCalendar: Calendar {
@@ -345,15 +320,15 @@ final class DormStore: ObservableObject {
     var utilityRoomName: String {
         state.selectedRoomName
             ?? state.roomDetail?.roomFullName
-            ?? (isLoggedIn ? "尚未选择宿舍" : "3栋 412")
+            ?? (isDemoMode ? "3栋 412" : "未选择宿舍")
     }
 
     var lastUtilitySyncText: String {
-        guard let date = state.lastUtilitySyncDate else { return "尚未同步" }
+        guard let date = state.lastUtilitySyncDate else { return "暂未更新" }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日 HH:mm"
-        return "最近同步 · \(formatter.string(from: date))"
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "HH:mm" : "M月d日 HH:mm"
+        return "更新于 \(formatter.string(from: date))"
     }
 
     /// 缓存 getbindroom 结果；保留用户手动选择的房间，不被自动绑定列表覆盖。
@@ -439,7 +414,28 @@ final class DormStore: ObservableObject {
         state.userName = result.userName
         state.phone = result.phone
         state.isLoggedIn = true
+        state.demoModeEnabled = false
         state.devices = result.devices
+        state.history.removeAll { $0.isDemo }
+        persistence()
+    }
+
+    func setDemoMode(_ enabled: Bool) {
+        guard !state.isLoggedIn else {
+            state.demoModeEnabled = false
+            state.history.removeAll { $0.isDemo }
+            persistence()
+            return
+        }
+        state.demoModeEnabled = enabled
+        if !enabled {
+            state.history.removeAll { $0.isDemo }
+        }
+        persistence()
+    }
+
+    func clearDemoHistory() {
+        state.history.removeAll { $0.isDemo }
         persistence()
     }
 
@@ -459,6 +455,7 @@ final class DormStore: ObservableObject {
 
     func signOut() {
         state.isLoggedIn = false
+        state.demoModeEnabled = false
         state.sessionId = nil
         state.sessionTimestamp = nil
         state.outid = nil
@@ -470,6 +467,7 @@ final class DormStore: ObservableObject {
         state.selectedRoomName = nil
         state.roomDetail = nil
         state.lastUtilitySyncDate = nil
+        state.history.removeAll { $0.isDemo }
         CredentialVault.clear()
         persistence()
     }

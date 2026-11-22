@@ -122,7 +122,7 @@ final class DormAppModel: ObservableObject {
         case .locked:
             return "轻触开锁"
         case .unlocking:
-            return "正在下发…"
+            return "开锁中…"
         case .unlocked:
             if let unlockCountdown {
                 return "已开锁 · \(unlockCountdown)s"
@@ -131,24 +131,31 @@ final class DormAppModel: ObservableObject {
         }
     }
 
-    var microStatus: String {
+    var microStatus: String? {
         if let lastOperationText, !lastOperationText.isEmpty {
             return lastOperationText
         }
-        return store.sessionStatusText
+        if store.isDemoMode {
+            return "演示模式 · 仅模拟开锁"
+        }
+        return nil
     }
 
     // MARK: 开锁 / 上锁
 
     func unlock() {
         guard !isBusy, doorState != .unlocking else { return }
+        if !store.isLoggedIn && !store.isDemoMode {
+            openLogin()
+            return
+        }
         guard let device = selectedDevice else {
-            showToast("暂无可用门锁，请先登录并刷新", style: .error)
+            showToast("未找到可用门锁，请尝试刷新", style: .error)
             return
         }
         guard device.isOnline else {
             Haptics.notify(.error)
-            showToast("门锁当前离线，请检查设备状态", style: .error)
+            showToast("门锁当前离线", style: .error)
             return
         }
 
@@ -165,13 +172,13 @@ final class DormAppModel: ObservableObject {
                 let successMessage: String
                 if store.isLoggedIn {
                     try await prepareSession()
-                    successMessage = try await client.openDoor(device)
+                    _ = try await client.openDoor(device)
+                    successMessage = "开锁成功"
                 } else {
-                    try await Task.sleep(nanoseconds: 1_050_000_000)
-                    successMessage = "开门指令已下发（演示）"
+                    try await Task.sleep(nanoseconds: 900_000_000)
+                    successMessage = "演示开锁成功"
                 }
 
-                let elapsed = max(0.1, Date().timeIntervalSince(operationStartedAt ?? Date()))
                 withAnimation(AppTheme.stateSpring) {
                     doorState = .unlocked
                 }
@@ -185,7 +192,7 @@ final class DormAppModel: ObservableObject {
                     detail: successMessage,
                     isDemo: !store.isLoggedIn
                 ))
-                lastOperationText = "\(successMessage) · 耗时 \(String(format: "%.1f", elapsed))s"
+                lastOperationText = successMessage
                 startRelockCountdown()
             } catch {
                 withAnimation(AppTheme.stateSpring) {
@@ -212,11 +219,11 @@ final class DormAppModel: ObservableObject {
                 deviceName: device.name,
                 action: .lock,
                 channel: auto ? .autoRelock : .local,
-                detail: auto ? "自动回锁 · \(relockTotal) 秒倒计时结束" : "立即复位上锁",
+                detail: auto ? "自动上锁" : "手动上锁",
                 isDemo: !store.isLoggedIn
             ))
         }
-        lastOperationText = auto ? "已自动回锁 · \(relockTotal)s" : "已立即上锁"
+        lastOperationText = auto ? "已自动上锁" : "已手动上锁"
         if auto {
             Haptics.notify(.success)
         }
@@ -288,9 +295,11 @@ final class DormAppModel: ObservableObject {
                 } catch {
                     handleFailure(error)
                 }
+            } else if store.isDemoMode {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                showToast("门锁状态已刷新", style: .info)
             } else {
-                try? await Task.sleep(nanoseconds: 650_000_000)
-                showToast("演示门锁状态已刷新", style: .info)
+                openLogin()
             }
         }
     }
@@ -491,10 +500,23 @@ final class DormAppModel: ObservableObject {
         selectedDeviceID = result.devices.first?.deviceId
         showLogin = false
         loginNotice = nil
-        lastOperationText = "已连接完美校园 · \(result.devices.count) 把门锁"
+        lastOperationText = nil
         Haptics.notify(.success)
-        showToast("已连接完美校园 · \(result.devices.count) 把门锁", style: .success)
+        showToast("登录成功，已同步 \(result.devices.count) 把门锁", style: .success)
         scheduleUtilitiesRefresh()
+    }
+
+    func setDemoMode(_ enabled: Bool) {
+        stopRelockCountdown()
+        unlockCountdown = nil
+        withAnimation(AppTheme.stateSpring) {
+            doorState = .locked
+        }
+        store.setDemoMode(enabled)
+        selectedDeviceID = store.devices.first?.deviceId
+        lastOperationText = nil
+        Haptics.impact(.light)
+        showToast(enabled ? "已开启演示模式" : "已关闭演示模式", style: .info)
     }
 
     func signOut() {
@@ -503,12 +525,12 @@ final class DormAppModel: ObservableObject {
         stopRelockCountdown()
         unlockCountdown = nil
         doorState = .locked
-        selectedDeviceID = DoorDevice.demo.deviceId
+        selectedDeviceID = nil
         store.signOut()
         utilityConfig = nil
         utilitiesError = nil
         lastOperationText = nil
-        showToast("已退出账号，回到演示模式", style: .info)
+        showToast("已退出登录", style: .info)
     }
 
     func openLogin(notice: String? = nil) {
@@ -585,16 +607,20 @@ final class DormAppModel: ObservableObject {
         case .utilities:
             if let detail = store.roomDetail, let meter = detail.primaryMeter {
                 let kind = detail.kind(for: meter)
-                let status = meter.isOn ? kind.statusOnText : kind.statusOffText
-                return "今日 \(formatUtility(meter.todayUse)) \(kind.unit) · \(status)"
+                return "今日 \(formatUtility(meter.todayUse)) \(kind.unit)"
             }
-            return "约可用 \(store.estimatedElectricityDays) 天"
+            if store.isDemoMode {
+                return "约可用 \(store.estimatedElectricityDays) 天"
+            }
+            return "选择宿舍查询"
         case .history:
-            return "本周 \(store.unlockThisWeekCount) 次开锁"
+            return store.unlockThisWeekCount > 0
+                ? "本周开锁 \(store.unlockThisWeekCount) 次"
+                : "暂无记录"
         case .climate:
             return "未连接"
         case .campusCard:
-            return "待接入"
+            return "未接入"
         }
     }
 
@@ -605,13 +631,16 @@ final class DormAppModel: ObservableObject {
                 let kind = detail.kind(for: meter)
                 return "\(formatUtility(meter.remaining)) \(kind.unit)"
             }
-            return String(format: "%.1f kWh", store.electricityKWh)
+            if store.isDemoMode {
+                return String(format: "%.1f kWh", store.electricityKWh)
+            }
+            return "—"
         case .history:
-            return "\(store.historyThisWeekCount) 条记录"
+            return store.historyThisWeekCount > 0 ? "\(store.historyThisWeekCount) 条" : "0 条"
         case .climate:
             return "26°C"
         case .campusCard:
-            return String(format: "¥%.1f", store.cardBalance)
+            return store.isDemoMode ? String(format: "¥%.1f", store.cardBalance) : "—"
         }
     }
 

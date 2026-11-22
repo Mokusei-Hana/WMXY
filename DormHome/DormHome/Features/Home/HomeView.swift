@@ -37,7 +37,6 @@ struct HomeView: View {
                         header
                         DoorHeroCard()
                         servicesSection
-                        securityFootnote
                     }
                     .padding(.horizontal, AppTheme.screenPadding)
                     .padding(.top, 8)
@@ -76,27 +75,43 @@ struct HomeView: View {
                     model.openLogin()
                 } label: {
                     HStack(spacing: 6) {
-                        Circle()
-                            .fill(store.isLoggedIn ? AppTheme.onlineGreen : AppTheme.warningAmber)
-                            .frame(width: 6, height: 6)
-                            .shadow(color: (store.isLoggedIn ? AppTheme.onlineGreen : AppTheme.warningAmber).opacity(0.6), radius: 4)
-
-                        Text(store.isLoggedIn ? (store.userName ?? "已连接") : "演示模式")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                        if store.isLoggedIn {
+                            Circle()
+                                .fill(AppTheme.onlineGreen)
+                                .frame(width: 6, height: 6)
+                                .shadow(color: AppTheme.onlineGreen.opacity(0.6), radius: 4)
+                            Text(store.userName ?? "已连接")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        } else if store.isDemoMode {
+                            Circle()
+                                .fill(AppTheme.warningAmber)
+                                .frame(width: 6, height: 6)
+                                .shadow(color: AppTheme.warningAmber.opacity(0.6), radius: 4)
+                            Text("演示")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        } else {
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(AppTheme.actionBlue)
+                            Text("登录")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(AppTheme.actionBlue)
+                        }
 
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(.secondary)
                     }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .padding(.horizontal, 13)
                     .frame(height: 34)
                     .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(store.isLoggedIn ? "已连接完美校园，轻点切换账号" : "演示模式，轻点登录完美校园账号")
+                .accessibilityLabel(store.isLoggedIn ? "已登录，轻点切换账号" : "登录完美校园账号")
             }
         }
     }
@@ -163,22 +178,6 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 26)
         .dormGlassCard(corner: AppTheme.tileCorner, shadow: false)
-    }
-
-    private var securityFootnote: some View {
-        HStack(spacing: 7) {
-            Image(systemName: "checkmark.shield.fill")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(AppTheme.onlineGreen.opacity(0.9))
-            Text("远程指令经 AES-128 加密，仅操作本人已授权门锁")
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 6)
-        .padding(.top, 2)
     }
 }
 

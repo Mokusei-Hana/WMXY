@@ -35,7 +35,6 @@ struct RoomPickerSheetView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
-                    notice
                     zoneStep
                     if selectedZone != nil {
                         buildingStep
@@ -53,7 +52,6 @@ struct RoomPickerSheetView: View {
                        let room = rooms.first(where: { $0.id == queryingRoomID }) {
                         queryingBanner(room)
                     }
-                    footer
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 14)
@@ -80,7 +78,7 @@ struct RoomPickerSheetView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("选择宿舍房间")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
-                Text("实时拉取 · 学校代码 2502 · 只读查询")
+                Text("依次选择校区、楼栋、楼层与房间")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -100,23 +98,6 @@ struct RoomPickerSheetView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("关闭选房")
         }
-    }
-
-    private var notice: some View {
-        HStack(alignment: .top, spacing: 9) {
-            Image(systemName: "info.circle.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppTheme.actionBlue)
-                .padding(.top, 1)
-
-            Text("选中房间后会尝试读取该房间的实时剩余量与近 7 日用量。完全未绑定的房间可能暂无公开表计数据，可在完美校园绑定后重试。本页不会绑定、解绑或修改任何房间。")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .dormGlassCard(corner: 18, shadow: false)
     }
 
     // MARK: - 校区
@@ -358,18 +339,6 @@ struct RoomPickerSheetView: View {
         .padding(12)
         .frame(maxWidth: .infinity)
         .dormGlassCard(corner: 18, shadow: false)
-    }
-
-    private var footer: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "lock.shield.fill")
-                .font(.system(size: 10, weight: .semibold))
-            Text("仅查询本人宿舍房间，请勿查询他人房间")
-                .font(.system(size: 10))
-        }
-        .foregroundStyle(.tertiary)
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.top, 4)
     }
 
     // MARK: - 数据加载
