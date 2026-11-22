@@ -1,0 +1,99 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub Release with the built IPA"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    name: Build DormHome Unsigned IPA
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26+
+        run: |
+          echo "Available Xcode installations:"
+          ls -d /Applications/Xcode*.app || true
+          XCODE_APP=$(ls -d /Applications/Xcode_26*.app /Applications/Xcode-26*.app /Applications/Xcode.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$XCODE_APP" ]; then
+            echo "Selecting $XCODE_APP"
+            sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          fi
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Build DormHome (Release, iphoneos, unsigned)
+        run: |
+          xcodebuild \
+            -project DormHome/DormHome.xcodeproj \
+            -scheme DormHome \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Package Unsigned IPA
+        id: package
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/DormHome.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "DormHome.app not found at $APP_PATH"
+            exit 1
+          fi
+
+          mkdir -p build/ipa/Payload
+          cp -R "$APP_PATH" build/ipa/Payload/DormHome.app
+
+          SHORT_SHA="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION_TAG="${GITHUB_REF#refs/tags/}"
+            IPA_NAME="DormHome-${VERSION_TAG}-unsigned.ipa"
+          else
+            IPA_NAME="DormHome-${SHORT_SHA}-unsigned.ipa"
+          fi
+
+          (cd build/ipa && zip -qry "../${IPA_NAME}" Payload)
+          ls -lh "build/${IPA_NAME}"
+
+          echo "ipa_name=${IPA_NAME}" >> "$GITHUB_OUTPUT"
+          echo "ipa_path=build/${IPA_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DormHome-IPA
+          path: ${{ steps.package.outputs.ipa_path }}
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release == true)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.run_number) }}"
+          name: "${{ startsWith(github.ref, 'refs/tags/v') && format('DormHome {0}', github.ref_name) || format('DormHome Build {0}', github.run_number) }}"
+          body: |
+            自动构建的未签名 `DormHome`（宿享）iOS 26 IPA 安装包。
+
+            可使用 **AltStore / SideStore / Sideloadly / TrollStore / 爱思助手** 等工具自签安装到 iPhone（需 iOS 26.0+）。
+          files: ${{ steps.package.outputs.ipa_path }}
