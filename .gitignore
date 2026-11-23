@@ -26,3 +26,11 @@ DerivedData/
 build/
 *.xcuserstate
 xcuserdata/
+
+# Android / Gradle 构建产物与本地配置
+.gradle/
+local.properties
+.idea/
+*.iml
+.cxx/
+.kotlin/

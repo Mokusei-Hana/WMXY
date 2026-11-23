@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.DormHome" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/launch_bg</item>
+    </style>
+
+    <color name="launch_bg">#080D18</color>
+</resources>
