@@ -2,7 +2,7 @@
 
 对完美校园（`com.newcapec.mobile.ncp` v5.8.37）门禁与智能水电（SWAE）接口的协议分析、Python 自动化脚本，以及原生 **iOS** / **Android** 客户端实现。
 
-> 用途：将「远程开门」与「宿舍水电余量查询」轻量化、脚本化，供本人账号、本人门禁与本人宿舍的日常使用及自动化联动（如 ESP32 按钮）。请勿用于非本人设备或批量调用。
+> 用途：将「远程开门」与「宿舍水电余量查询」轻量化、脚本化，供本人账号、本人门禁与本人宿舍的日常使用及自动化联动。请勿用于非本人设备或批量调用。
 
 ---
 
@@ -82,10 +82,9 @@ door.open_door(devices[0]["deviceId"], devices[0]["sn"])
 
 ---
 
-## ESP32 移植与抓包参考
+## 抓包复现参考
 
-- **ESP32 移植**：mbedtls 原生提供 RSA-1024、SPKI DER、3DES-CBC、SHA-256、AES-128-ECB。建议将 RSA 密钥对与 `session` 缓存进 NVS，NTP 对时后复用 ③–⑦ 链路以缩短开门耗时。
-- **抓包复现**：在已 root 的 Android 12 模拟器（如 MuMu 12）中将 mitmproxy 根证书挂载为系统证书，设置代理后使用 `tools/decrypt_flows.py` 解密 H5 请求。
+在已 root 的 Android 12 模拟器（如 MuMu 12）中将 mitmproxy 根证书挂载为系统证书，设置代理后使用 `tools/decrypt_flows.py` 解密 H5 请求。
 
 ---
 
